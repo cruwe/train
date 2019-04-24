@@ -29,10 +29,11 @@ module Train::Transports
 
         def self.creds(subscription_id, credentials)
           {
-            subscription_id: subscription_id,
-            tenant_id:       credentials[subscription_id]['tenant_id'],
-            client_id:       credentials[subscription_id]['client_id'],
-            client_secret:   credentials[subscription_id]['client_secret'],
+            subscription_id:  subscription_id,
+            tenant_id:        credentials[subscription_id]['tenant_id'],
+            client_id:        credentials[subscription_id]['client_id'],
+            client_secret:    credentials[subscription_id]['client_secret'],
+            environment_name: credentials[subscription_id]['environment_name'],
           }
         end
       end

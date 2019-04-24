@@ -19,6 +19,7 @@ module Train::Transports
     option :client_secret, default: ENV['AZURE_CLIENT_SECRET']
     option :subscription_id, default: ENV['AZURE_SUBSCRIPTION_ID']
     option :msi_port, default: ENV['AZURE_MSI_PORT'] || '50342'
+    option :environment_name, default: ENV['AZURE_ENVIRONMENT_NAME']
 
     # This can provide the client id and secret
     option :credentials_file, default: ENV['AZURE_CRED_FILE']
@@ -67,9 +68,19 @@ module Train::Transports
         end
 
         if klass == ::Azure::Resources::Profiles::Latest::Mgmt::Client
-          @credentials[:base_url] = MsRestAzure::AzureEnvironments::AzureCloud.resource_manager_endpoint_url
+          @credentials[:base_url] = case @options[:environment_name]
+                                    when 'AzureChinaCloud'
+                                      MsRestAzure::AzureEnvironments::AzureChinaCloud.resource_manager_endpoint_url
+                                    when 'AzureGermanCloud'
+                                      MsRestAzure::AzureEnvironments::AzureGermanCloud.resource_manager_endpoint_url
+                                    when 'AzureUSGovernment'
+                                      MsRestAzure::AzureEnvironments::AzureUSGovernment.resource_manager_endpoint_url
+                                    else
+                                      MsRestAzure::AzureEnvironments::AzureCloud.resource_manager_endpoint_url
+                                    end
+
         elsif klass == ::Azure::GraphRbac::Profiles::Latest::Client
-          client = GraphRbac.client(@credentials)
+          client = GraphRbac.client(@credentials, @options)
         elsif klass == ::Azure::KeyVault::Profiles::Latest::Mgmt::Client
           client = Vault.client(opts[:vault_name], @credentials)
         end
@@ -88,17 +99,28 @@ module Train::Transports
           ENV['MSI_VM'] = 'true'
           provider = ::MsRestAzure::MSITokenProvider.new(@options[:msi_port])
         else
+          ad_service_settings = case @options[:environment_name]
+                                when 'AzureChinaCloud'
+                                  ::MsRestAzure::ActiveDirectoryServiceSettings.get_azure_china_settings
+                                when 'AzureGermanCloud'
+                                  ::MsRestAzure::ActiveDirectoryServiceSettings.get_azure_german_settings
+                                when 'AzureUSGovernment'
+                                  ::MsRestAzure::ActiveDirectoryServiceSettings.get_azure_us_government_settings
+                                else
+                                  ::MsRestAzure::ActiveDirectoryServiceSettings.get_azure_settings
+                                end
           provider = ::MsRestAzure::ApplicationTokenProvider.new(
-            @options[:tenant_id],
-            @options[:client_id],
-            @options[:client_secret],
+              @options[:tenant_id],
+              @options[:client_id],
+              @options[:client_secret],
+              ad_service_settings,
           )
         end
 
         @credentials = {
-          credentials: ::MsRest::TokenCredentials.new(provider),
-          subscription_id: @options[:subscription_id],
-          tenant_id: @options[:tenant_id],
+            credentials: ::MsRest::TokenCredentials.new(provider),
+            subscription_id: @options[:subscription_id],
+            tenant_id: @options[:tenant_id],
         }
         @credentials[:client_id] = @options[:client_id] unless @options[:client_id].nil?
         @credentials[:client_secret] = @options[:client_secret] unless @options[:client_secret].nil?
